@@ -1,0 +1,4 @@
+put gerber file zip
+use BOM qnd CPL files in the next section
+realign the MLX and W25N in the component placement diagram
+can add XIAO ESP32C3 to the order but need to figureout how
