@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>ESP32 CSV Viewer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 10px;
+      max-width: 100%;
+      overflow-x: hidden;
+    }
+    textarea {
+      width: 100%;
+      height: 300px;
+      margin-top: 20px;
+      font-family: monospace;
+      white-space: pre;
+      box-sizing: border-box;
+      font-size: 12px;
+      resize: vertical;
+    }
+    button {
+      margin-right: 5px;
+      margin-bottom: 10px;
+      padding: 12px 8px;
+      font-size: 14px;
+      min-width: 70px;
+      border: none;
+      border-radius: 4px;
+      background-color: #4CAF50;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    .form-section, .checkbox-section {
+      margin-bottom: 15px;
+      padding: 12px;
+      background: #f4f4f4;
+      border-radius: 8px;
+    }
+    input[type="number"] {
+      padding: 8px;
+      width: 80px;
+      margin-right: 8px;
+      margin-bottom: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    #formResponse {
+      margin-top: 10px;
+      font-weight: bold;
+      color: green;
+      font-size: 14px;
+    }
+    .checkbox-item {
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+    }
+    .checkbox-item input[type="checkbox"] {
+      margin-right: 10px;
+      transform: scale(1.3);
+    }
+    .checkbox-item label {
+      cursor: pointer;
+      font-size: 16px;
+    }
+    h2 {
+      font-size: 20px;
+      margin-bottom: 10px;
+    }
+    h3 {
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+    p {
+      font-size: 14px;
+    }
+    @media (max-width: 768px) {
+      body {
+        margin: 5px;
+      }
+      textarea {
+        height: 250px;
+        font-size: 11px;
+      }
+      button {
+        padding: 14px 10px;
+        font-size: 13px;
+        margin-right: 3px;
+      }
+      .form-section, .checkbox-section {
+        padding: 10px;
+      }
+      input[type="number"] {
+        width: 70px;
+        margin-right: 5px;
+      }
+      .checkbox-item label {
+        font-size: 15px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h2>ESP32 CSV Viewer + Logging Config</h2>
+  <p>Connect to Wi-Fi: <strong>ESP32-DataServer</strong></p>
+
+  <div class="form-section">
+    <h3>Configure Logging</h3>
+    <form id="configForm">
+      <label for="duration">Duration (s):</label>
+      <input type="number" id="duration" min="1" max="600" required>
+
+      <label for="rate">Rate (Hz):</label>
+      <input type="number" id="rate" min="1" max="100" required>
+
+      <button type="submit">📤 Send Config</button>
+    </form>
+    <div id="formResponse"></div>
+  </div>
+
+  <div class="checkbox-section">
+    <h3>Which sensor are you using?</h3>
+    <div class="checkbox-item">
+      <input type="checkbox" id="accelerometer">
+      <label for="accelerometer">Accelerometer</label>
+    </div>
+    <div class="checkbox-item">
+      <input type="checkbox" id="gyroscope">
+      <label for="gyroscope">Gyroscope</label>
+    </div>
+    <div class="checkbox-item">
+      <input type="checkbox" id="magnetometer">
+      <label for="magnetometer">Magnetometer</label>
+    </div>
+  </div>
+
+  <label><input type="checkbox" id="autoScroll" checked> Auto-scroll</label><br>
+  <label><input type="checkbox" id="autoSave"> Auto-save CSV</label><br>
+
+  <button onclick="startFetching()">▶ Connect</button>
+  <button onclick="stopFetching()">⏹ Stop</button>
+  <button onclick="downloadCSV()">⬇ Download CSV</button>
+  <button onclick="clearAll()" style="background-color: #ff6b6b; color: white;">🗑 Clear All</button>
+
+  <div id="loadingSpinner" style="display:none; margin-top: 10px; font-style: italic; color: #888;">⏳ Connecting to ESP32...</div>
+
+  <textarea id="csvDisplay" readonly>Not connected...</textarea>
+
+  <script>
+    const ESP32_URL = "http://192.168.1.100";
+    let fetchInterval = null;
+    let latestCSV = "";
+    let displayedLines = new Set();
+    let isConnected = false;
+    let lastDataReceived = "";
+
+    const durationInput = document.getElementById("duration");
+    const rateInput = document.getElementById("rate");
+    const formResponse = document.getElementById("formResponse");
+    const csvDisplay = document.getElementById("csvDisplay");
+
+    document.getElementById("configForm").addEventListener("submit", function (e) {
+      e.preventDefault();
+      const duration = durationInput.value;
+      const rate = rateInput.value;
+      const accel = document.getElementById("accelerometer").checked;
+      const gyro = document.getElementById("gyroscope").checked;
+      const mag = document.getElementById("magnetometer").checked;
+
+      const noSelection = !accel && !gyro && !mag;
+      const params = new URLSearchParams({
+        duration,
+        rate,
+        accelerometer: noSelection || accel,
+        gyroscope: noSelection || gyro,
+        magnetometer: noSelection || mag
+      });
+
+      const url = `${ESP32_URL}/send?${params.toString()}`;
+      formResponse.textContent = `✅ Config sent: Duration=${duration}s, Rate=${rate}Hz, Accel=${params.get("accelerometer")}, Gyro=${params.get("gyroscope")}, Mag=${params.get("magnetometer")}`;
+      fetch(url).catch(err => {
+        //formResponse.textContent = "❌ Error: " + err;
+      });
+    });
+
+    async function fetchData() {
+      if (!isConnected) return;
+      try {
+        const response = await fetch(`${ESP32_URL}/data`);
+        if (!response.ok) throw new Error("Network response was not ok");
+
+        const newData = await response.text();
+        latestCSV = newData;
+
+        const isNewData = newData !== lastDataReceived;
+
+        if (!isNewData) {
+          if (!csvDisplay.value.includes("⏳ Waiting for more data...")) {
+            csvDisplay.value += "\n⏳ Waiting for more data...";
+          }
+        } else {
+          csvDisplay.value = csvDisplay.value.replace(/\n⏳ Waiting for more data\.\.\./g, "");
+          const lines = newData.trim().split("\n");
+          for (const line of lines) {
+            if (!displayedLines.has(line)) {
+              csvDisplay.value += (csvDisplay.value.endsWith("\n") ? "" : "\n") + line;
+              displayedLines.add(line);
+            }
+          }
+
+          // 🚀 Auto-save if enabled
+          if (document.getElementById("autoSave").checked) {
+            autoDownloadCSV(newData);
+          }
+
+          lastDataReceived = newData;
+        }
+
+        if (document.getElementById("autoScroll").checked) {
+          csvDisplay.scrollTop = csvDisplay.scrollHeight;
+        }
+      } catch (err) {
+        if (isConnected) {
+          csvDisplay.value += "\nScanning - check Wi-Fi";
+        }
+      }
+    }
+
+    function startFetching() {
+      if (fetchInterval) return;
+      isConnected = true;
+      csvDisplay.value = "🔄 Connecting...\n";
+      displayedLines.clear();
+      lastDataReceived = "";
+      document.getElementById("loadingSpinner").style.display = "block";
+      fetchData();
+      fetchInterval = setInterval(fetchData, 5000);
+    }
+
+    function stopFetching() {
+      if (fetchInterval) {
+        clearInterval(fetchInterval);
+        fetchInterval = null;
+      }
+      isConnected = false;
+      csvDisplay.value = csvDisplay.value.replace(/\n⏳ Waiting for more data\.\.\./g, "");
+      csvDisplay.value += "\n⏹ Stopped receiving data.";
+      document.getElementById("loadingSpinner").style.display = "none";
+    }
+
+    function downloadCSV() {
+      if (!latestCSV) return alert("No data to download.");
+      const blob = new Blob([latestCSV], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `esp32_log_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function autoDownloadCSV(data) {
+      const blob = new Blob([data], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      a.download = `esp32_auto_${timestamp}.csv`;
+      document.body.appendChild(a);  // Required for Firefox
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function clearAll() {
+      stopFetching();
+      durationInput.value = "";
+      rateInput.value = "";
+      document.getElementById("accelerometer").checked = false;
+      document.getElementById("gyroscope").checked = false;
+      document.getElementById("magnetometer").checked = false;
+      formResponse.textContent = "";
+      csvDisplay.value = "Not connected...";
+      latestCSV = "";
+      displayedLines.clear();
+      lastDataReceived = "";
+      document.getElementById("loadingSpinner").style.display = "none";
+    }
+  </script>
+</body>
+</html>
