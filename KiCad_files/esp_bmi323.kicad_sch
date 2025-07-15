@@ -1,0 +1,262 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "310581da-99c5-463e-ad46-3c970a7c4179")
+	(paper "A4")
+	(lib_symbols)
+	(text "I2C 0x0C"
+		(exclude_from_sim no)
+		(at 160.02 86.614 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+		(uuid "194df7e8-2c09-4a91-a091-3d6254210dc7")
+	)
+	(text "SPI"
+		(exclude_from_sim no)
+		(at 123.952 81.788 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+		(uuid "6b66c1bf-aa8d-425d-a53e-85409c9fe5f7")
+	)
+	(text "I2C 0x68"
+		(exclude_from_sim no)
+		(at 160.02 81.534 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+		(uuid "fe9a1a8e-cdec-4700-9303-78aa8f25fe17")
+	)
+	(wire
+		(pts
+			(xy 153.67 82.55) (xy 167.64 82.55)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5d2b8be3-7429-4522-a619-6180d17ac14e")
+	)
+	(wire
+		(pts
+			(xy 165.1 113.03) (xy 168.91 113.03)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "614f53c2-1345-4152-bbeb-d1edf140512a")
+	)
+	(wire
+		(pts
+			(xy 153.67 87.63) (xy 165.1 87.63)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "84222a88-579d-4cda-9e8c-b878f3a1ed4c")
+	)
+	(wire
+		(pts
+			(xy 116.84 82.55) (xy 130.81 82.55)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "af936c3f-d471-4938-80ed-f8229322e7b4")
+	)
+	(wire
+		(pts
+			(xy 165.1 87.63) (xy 165.1 113.03)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ec5c830a-69e4-4fdd-84ea-89e6502479a6")
+	)
+	(sheet
+		(at 90.17 73.66)
+		(size 26.67 15.24)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "4166aa48-311d-418a-b183-31a0d92f0abf")
+		(property "Sheetname" "W25N001GVZEIG"
+			(at 90.17 72.9484 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "W25N001GVZEIG.kicad_sch"
+			(at 90.17 89.4846 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "esp_bmi323"
+				(path "/310581da-99c5-463e-ad46-3c970a7c4179"
+					(page "2")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 130.81 71.12)
+		(size 22.86 24.13)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "8f4532f7-9707-4bc6-bf25-861aa8dc1190")
+		(property "Sheetname" "XIAOESP32C3"
+			(at 130.81 70.4084 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "XIAOESP32C3.kicad_sch"
+			(at 130.81 95.8346 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "esp_bmi323"
+				(path "/310581da-99c5-463e-ad46-3c970a7c4179"
+					(page "5")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 167.64 73.66)
+		(size 27.94 19.05)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "96219b77-5d1c-4d54-b203-05ed9f3a0161")
+		(property "Sheetname" "BMI323"
+			(at 167.64 72.9484 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "BMI323.kicad_sch"
+			(at 167.64 93.2946 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "esp_bmi323"
+				(path "/310581da-99c5-463e-ad46-3c970a7c4179"
+					(page "3")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 168.91 102.87)
+		(size 21.59 17.78)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "d3224969-8cfd-41dc-b0c9-ff6ef6e3abcb")
+		(property "Sheetname" "MLX90393"
+			(at 168.91 102.1584 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "MLX90393.kicad_sch"
+			(at 168.91 121.2346 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "esp_bmi323"
+				(path "/310581da-99c5-463e-ad46-3c970a7c4179"
+					(page "4")
+				)
+			)
+		)
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+	(embedded_fonts no)
+)
