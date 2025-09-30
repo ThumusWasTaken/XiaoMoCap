@@ -50,7 +50,7 @@ bool W25N01GV::isReady() {
     return !(status & 0x01); // Return true if not busy
 }
 
-bool W25N01GV::readPage(uint16_t page, uint8_t* buffer, uint16_t length) {
+bool W25N01GV::readPage(uint32_t page, uint8_t* buffer, uint16_t length) {
     select();
     transfer(CMD_READ_PAGE);
     transfer((page >> 8) & 0xFF);
@@ -72,7 +72,7 @@ bool W25N01GV::readPage(uint16_t page, uint8_t* buffer, uint16_t length) {
     return true;
 }
 
-bool W25N01GV::blockErase(uint16_t page) {
+bool W25N01GV::blockErase(uint32_t page) {
   writeEnable();
   uint8_t status = readStatus();
   if (!(status & 0x02)) {
@@ -116,7 +116,7 @@ bool W25N01GV::programLoad(uint16_t column, const uint8_t* data, uint16_t length
     return true;
 }
 
-bool W25N01GV::programExecute(uint16_t page) {
+bool W25N01GV::programExecute(uint32_t page) {
     select();
     transfer(CMD_PROGRAM_EXECUTE);
     transfer((page >> 8) & 0xFF);
@@ -161,7 +161,7 @@ uint8_t W25N01GV::transfer(uint8_t data) {
     return SPI.transfer(data);
 }
 
-bool isPageUsable(W25N01GV &flash, uint16_t page) {
+bool isPageUsable(W25N01GV &flash, uint32_t page) {
   // Try to erase the block containing this page
   bool eraseResult = flash.blockErase(page);
   uint8_t status = flash.readStatus();
@@ -173,7 +173,7 @@ bool isPageUsable(W25N01GV &flash, uint16_t page) {
 uint16_t findUsablePage(W25N01GV &flash, uint16_t startPage = 100) {
   Serial.println("Scanning for usable pages...");
   
-  for (uint16_t page = startPage; page < 1000; page += 64) { // Check every 64 pages (each block)
+  for (uint32_t page = startPage; page < 65536; page += 64) { // Check every 64 pages (each block)
     Serial.print("Testing page ");
     Serial.print(page);
     Serial.print("... ");
@@ -254,7 +254,7 @@ uint8_t W25N01GV::readConfiguration() {
     return config;
 }
 
-bool W25N01GV::readSpareArea(uint16_t page, uint8_t* buffer, uint16_t length) {
+bool W25N01GV::readSpareArea(uint32_t page, uint8_t* buffer, uint16_t length) {
     // Load page into cache
     select();
     transfer(CMD_READ_PAGE);
