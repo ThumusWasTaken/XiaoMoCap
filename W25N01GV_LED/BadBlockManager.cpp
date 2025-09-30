@@ -2,7 +2,7 @@
 
 BadBlockManager::BadBlockManager(W25N01GV& flash)
 : _flash(flash), _nextBlockIndex(0) {
-    for (uint8_t i = 0; i < sizeof(_goodBlocks); i++) {
+    for (uint16_t i = 0; i < sizeof(_goodBlocks); i++) {
         _goodBlocks[i] = false;
     }
 }
@@ -15,8 +15,8 @@ bool BadBlockManager::isFactoryBad(uint16_t blockBasePage) {
 
 void BadBlockManager::scan() {
     Serial.println("Scanning for good blocks...");
-    for (uint8_t block = 0; block < 16; block++) {
-        uint16_t page = block * 64;
+    for (uint16_t block = 0; block < 1024; block++) {
+        uint32_t page = block * 64;
         Serial.print("Block ");
         Serial.print(block);
         Serial.print(" (page ");
@@ -43,12 +43,12 @@ void BadBlockManager::scan() {
 }
 
 bool BadBlockManager::isBlockGood(uint16_t block) {
-    if (block >= 16) return false;
+    if (block >= 1024) return false;
     return _goodBlocks[block];
 }
 
 int16_t BadBlockManager::getNextGoodBlock() {
-    for (uint8_t i = _nextBlockIndex; i < 16; i++) {
+    for (uint16_t i = _nextBlockIndex; i < 1024; i++) {
         if (_goodBlocks[i]) {
             _nextBlockIndex = i + 1;
             return i;
@@ -56,3 +56,4 @@ int16_t BadBlockManager::getNextGoodBlock() {
     }
     return -1; // No more good blocks
 }
+
