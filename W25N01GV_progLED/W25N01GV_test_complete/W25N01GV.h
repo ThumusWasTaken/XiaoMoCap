@@ -15,17 +15,17 @@ public:
     uint8_t readStatus();
     bool writeEnable();
     bool isReady();
-    bool readPage(uint16_t page, uint8_t* buffer, uint16_t length);
-    bool blockErase(uint16_t page);
+    bool readPage(uint32_t page, uint8_t* buffer, uint16_t length);
+    bool blockErase(uint32_t page);
     bool programLoad(uint16_t column, const uint8_t* data, uint16_t length);
-    bool programExecute(uint16_t page);
+    bool programExecute(uint32_t page);
     bool setECCEnabled(bool enabled);
     bool clearBlockProtection();
     uint8_t readConfiguration();
     uint16_t findUsablePage(W25N01GV &flash, uint16_t startPage = 100);
-    bool isPageUsable(W25N01GV &flash, uint16_t page);
+    bool isPageUsable(W25N01GV &flash, uint32_t page);
     void setSPIFrequency(uint32_t hz);
-    bool readSpareArea(uint16_t page, uint8_t* buffer, uint16_t length);
+    bool readSpareArea(uint32_t page, uint8_t* buffer, uint16_t length);
 
 
 

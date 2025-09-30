@@ -75,7 +75,8 @@ void Logger::readAllLogs() {
     uint8_t pageBuf[2048];
 
     Serial.println("Reading back logs:");
-    for (uint16_t page = _currentBlock * 64; page < _currentPage; page++) {
+    //for (uint32_t page = 0; page < _currentPage; page++) {
+    for (uint32_t page = _currentBlock * 64; page < _currentPage; page++) {
         _flash.readPage(page, pageBuf, 2048);
 
         for (uint16_t i = 0; i < 2048; i++) {

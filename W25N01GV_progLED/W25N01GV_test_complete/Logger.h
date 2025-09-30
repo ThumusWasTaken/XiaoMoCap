@@ -12,7 +12,7 @@ public:
     void logRecord(const String& record);
     void flush();
     void readAllLogs();
-    uint16_t getCurrentPage() { return _currentPage; }
+    uint32_t getCurrentPage() { return _currentPage; }
 
 
 private:
@@ -20,7 +20,7 @@ private:
     BadBlockManager& _bbm;
     uint8_t _buffer[2048];
     uint16_t _bufferPos;
-    uint16_t _currentPage;
+    uint32_t _currentPage;
     uint16_t _currentBlock;
 };
 
