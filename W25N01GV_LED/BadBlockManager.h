@@ -14,10 +14,11 @@ public:
 
 private:
     W25N01GV& _flash;
-    bool _goodBlocks[1024 / 64]; // 16 blocks (for 1024 pages, 64 per block)
+    bool _goodBlocks[65536/64]; // 1024 blocks (for 65536 pages, 64 per block)
     uint8_t _nextBlockIndex;
 
     bool isFactoryBad(uint16_t blockBasePage);
 };
 
 #endif
+
