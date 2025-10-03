@@ -50,21 +50,6 @@ void startWiFi() {
 }
 
 //Function to handle CSV data request
-// void handleData() {
-//   Serial.println("\n--- starting handle data ---");
-
-//   delay(100);
-
-//   //server.send(dat);
-//   String csvData = "";
-//   csvData += String(dat) + "\n";
-//   server.send(200, "text/csv", csvData);
-
-//   delay(5000);
-
-//   Serial.println("\n--- dat sent ---");
-// }
-
 void handleData() {
   // Tell the browser CORS is allowed
   server.sendHeader("Access-Control-Allow-Origin", "*");
@@ -72,6 +57,7 @@ void handleData() {
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
   server.send(200, "text/csv", ""); // headers
   server.sendContent("timestamp_iso,ax,ay,az,gx,gy,gz,mx,my,mz,counter\n");
+  // server.sendContent("timestamp_iso,ax,ay,az,gx,gy,gz,counter\n");
 
   uint8_t readBuf[2048];
   uint16_t lastPage = logger.getCurrentPage();
@@ -108,6 +94,7 @@ void setup() {
 
   // I2C setup (Xiao ESP32-C3: SDA = 8, SCL = 9)
   Wire.begin();
+  Wire.setClock(400000);
   delay(100);
 
   // --- Flash setup ---
@@ -155,7 +142,8 @@ void setup() {
   mag.setResolution(MLX90393_X, MLX90393_RES_16);
   mag.setResolution(MLX90393_Y, MLX90393_RES_16);
   mag.setResolution(MLX90393_Z, MLX90393_RES_16);
-  mag.setOversampling(MLX90393_OSR_2);
+  mag.setOversampling(MLX90393_OSR_1);
+  mag.setFilter(MLX90393_FILTER_1);
 
   delay(10);
 
@@ -209,179 +197,190 @@ void loop() {
     }
   }
   uint16_t sample_rate_hz = input.toInt();
-  if (sample_rate_hz == 0 || sample_rate_hz > 100) sample_rate_hz = 10;
-  //uint32_t interval = 1000 / sample_rate_hz;
-  uint32_t interval = 500 / sample_rate_hz;
+  if (sample_rate_hz == 0 || sample_rate_hz > 200) sample_rate_hz = 50;
+
+  uint32_t interval_us = 1000000UL / sample_rate_hz;
 
   Serial.printf("Logging for %lu seconds at %u Hz...\n", duration_ms / 1000, sample_rate_hz);
-  Serial.println("timestamp_iso,ax,ay,az,gx,gy,gz,mx,my,mz");
-
-  int16_t data_num = 0;
-  String str_acc = "";
-  String str_gyr = "";
-   String str_mag = "";
+  Serial.println("epoch_ms,ax,ay,az,gx,gy,gz,mx,my,mz,counter");
 
   uint32_t startTime = millis();
+  uint32_t nextSample = micros();
+  uint32_t counter = 0;
+  uint8_t magDivider = 0;
+
+  char lineBuf[160];  // buffer for CSV row
+
   while (millis() - startTime < duration_ms) {
-    // Timestamp
-    time_t now = time(NULL);
-    struct tm* tm_info = gmtime(&now);
-    char timestamp[25];
-    strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", tm_info);
+    // Wait until next sample slot
+    // while ((int32_t)(micros() - nextSample) < 0) {
+    //   // yield(); // optional
+    // }
+    // nextSample += interval_us;
+
+    // Timestamp in ms since epoch
+    uint64_t epoch_ms = (uint64_t)time(NULL) * 1000ULL + (millis() % 1000);
 
     // BMI270 readings
-    float ax = 0, ay = 0, az = 0;
-    float gx = 0, gy = 0, gz = 0;
-    if (acc_active) {
-      if (IMU.accelerationAvailable()) IMU.readAcceleration(ax, ay, az);
-      str_acc = "," + String(ax,3) + "," + String(ay,3) + "," + String(az,3);
-    } else {
-      str_acc = "";
-    }
-    if (gyr_active) {
-      if (IMU.gyroscopeAvailable()) IMU.readGyroscope(gx, gy, gz);
-      str_gyr = "," + String(gx,2) + "," + String(gy,2) + "," + String(gz,2);
-    } else {
-      str_gyr = "";
-    }
+    float ax, ay, az, gx, gy, gz;
+    IMU.readAcceleration(ax, ay, az);
+    IMU.readGyroscope(gx, gy, gz);
 
-    // MLX90393 readings
+    // MLX90393 readings every 4th cycle
     float mx = 0, my = 0, mz = 0;
-    if (mag_active) {
+    if (mag_active && magDivider == 0) {
       mag.readData(&mx, &my, &mz);
-      str_mag = "," + String(mx,2) + "," + String(my,2) + "," + String(mz,2);
-    } else {
-      str_mag = "";
+    }
+    magDivider = (magDivider + 1) % 4;
+
+    // Format CSV row
+    int len = snprintf(lineBuf, sizeof(lineBuf),
+                       "%llu,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%lu\n",
+                       epoch_ms, ax, ay, az, gx, gy, gz, mx, my, mz, counter);
+
+    // Write to NAND
+    logger.logRecord(lineBuf);
+
+    // Print only some samples (to avoid slowing down loop)
+    if (counter > 780) {
+      Serial.write(lineBuf, len);
     }
 
-    // Format CSV
-    String line = String(timestamp) + str_acc + str_gyr + str_mag + "," + String(data_num);
-
-    logger.logRecord(line);
-    Serial.println(line);
-
-    delay(interval);
-    data_num += 1;
+    counter++;
   }
 
   logger.flush();
-  Serial.println("Logging complete. Dumping logs...\n");
+  Serial.println("Logging complete.");
 
   Serial.println("Turning on wifi. 30sec to connect...\n");
   startWiFi();
-
   delay(30000);
 
-  // dat = "timestamp_iso,ax,ay,az,gx,gy,gz,mx,my,mz,counter\n";
-  // server.handleClient();
-
-  // uint8_t readBuf[2048];
-  // uint16_t lastPage = logger.getCurrentPage();
-
-  // for (uint16_t page = 0; page < lastPage; page++) {
-  //   // Skip bad blocks
-  //   if (!bbm.isBlockGood(page / 64)) continue;
-  //   if (!flash.readPage(page, readBuf, sizeof(readBuf))) continue;
-
-  //   String chunk = "";
-  //   for (uint16_t i = 0; i < sizeof(readBuf); i++) {
-  //     char c = (char)readBuf[i];
-  //     if (c == (char)0xFF || c == 0) break;
-
-  //     if ((c >= 32 && c <= 126) || c == '\n' || c == '\r') {
-  //       Serial.print(c);
-  //       chunk += c;
-
-  //       // Flush every ~512 bytes to avoid huge buffer
-  //       if (chunk.length() > 512) {
-  //         dat = chunk;
-  //         server.handleClient();
-  //         chunk = "";
-  //         dat = chunk;
-  //         delay(100);
-  //       }
-  //     }
-  //   }
-
-  //   // Send any leftover chunk for this page
-  //   if (chunk.length() > 0) {
-  //     dat = chunk;
-  //     server.handleClient();
-  //     chunk = "";
-  //     dat = chunk;
-  //     delay(100);
-  //   }
-
-  //   Serial.println("\n--- page sent ---");
-  //   delay(5); // Let WiFi stack breathe
-  // }
-
-
-// uint8_t readBuf[2048];
-// uint16_t lastPage = logger.getCurrentPage();
-// Serial.printf("Reading %u pages...\n", lastPage);
-
-// for (uint16_t page = 0; page < lastPage; page++) {
-//   // Check if page is valid before reading
-//   if (!bbm.isBlockGood(page / 64)) {  // Assuming 64 pages per block
-//     Serial.printf("Skipping bad block at page %u\n", page);
-//     continue;
-//   }
-  
-//   // Clear buffer before reading
-//   memset(readBuf, 0, sizeof(readBuf));
-  
-//   // Read page with error checking
-//   if (!flash.readPage(page, readBuf, 2048)) {
-//     Serial.printf("Failed to read page %u\n", page);
-//     continue;
-//   }
-
-    
-//   // Process data more carefully
-//   for (uint16_t i = 0; i < 2048; i++) {
-//     char c = (char)readBuf[i];
-    
-//     // Stop at flash erased state or null terminator
-//     if (c == (char)0xFF || c == 0) break;
-    
-//     // Only print printable characters and newlines
-//     if (c >= 32 && c <= 126) {
-//       Serial.print(c);
-//     } else if (c == '\n' || c == '\r') {
-//       Serial.print(c);
-//     } else {
-//       // Skip non-printable characters that might indicate corruption
-//       Serial.print('?');  // Or skip entirely
-//     }
-//     dat += c;
-//   }
-//   delay(100);
-//   server.handleClient();
-
-//   delay(300);
-//   dat = "";
-// }
-
+  // Handle clients briefly
   for (uint16_t i = 0; i < 5; i++) {
     server.handleClient();
     delay(10);
-    Serial.println("\n--- handled ---");
-    Serial.println("\n--- write yes to read again, no to exit read loop ---");
-    String input = "";
-    while (input.length() == 0) {
-      while (Serial.available()) {
-        char c = Serial.read();
-        if (c == '\n' || c == '\r') break;
-        input += c;
-      }
-    }
-    if (input == "no"){
-      break;
-    }
   }
-
 
   Serial.println("\n--- CSV complete ---");
   while (1);
 }
+
+
+// void loop() {
+//   Serial.println("\n--- Logging Menu ---");
+//   Serial.println("Enter logging duration in seconds: ");
+//   String input = "";
+//   while (input.length() == 0) {
+//     while (Serial.available()) {
+//       char c = Serial.read();
+//       if (c == '\n' || c == '\r') break;
+//       input += c;
+//     }
+//   }
+//   uint32_t duration_ms = input.toInt() * 1000UL;
+//   if (duration_ms == 0) duration_ms = 60000;
+
+//   Serial.println("Enter sampling rate in Hz: ");
+//   input = "";
+//   while (input.length() == 0) {
+//     while (Serial.available()) {
+//       char c = Serial.read();
+//       if (c == '\n' || c == '\r') break;
+//       input += c;
+//     }
+//   }
+//   uint16_t sample_rate_hz = input.toInt();
+//   if (sample_rate_hz == 0 || sample_rate_hz > 100) sample_rate_hz = 10;
+//   uint32_t interval = 0; // 1000 / sample_rate_hz;
+//   //uint32_t interval = 500 / sample_rate_hz;
+
+//   Serial.printf("Logging for %lu seconds at %u Hz...\n", duration_ms / 1000, sample_rate_hz);
+//   Serial.println("timestamp_iso,ax,ay,az,gx,gy,gz,mx,my,mz,counter");
+//   // Serial.println("timestamp_iso,ax,ay,az,gx,gy,gz,stamp");
+
+//   int16_t data_num = 0;
+//   String str_acc = "";
+//   String str_gyr = "";
+//   String str_mag = "";
+//   uint8_t count_mag = 0; // set to read every 4 times
+
+//   uint32_t startTime = millis();
+//   while (millis() - startTime < duration_ms) {
+//     // Timestamp
+//     time_t now = time(NULL);
+//     struct tm* tm_info = gmtime(&now);
+//     char timestamp[25];
+//     strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", tm_info);
+
+//     // BMI270 readings
+//     float ax = 0, ay = 0, az = 0;
+//     float gx = 0, gy = 0, gz = 0;
+//     if (acc_active) {
+//       // if (IMU.accelerationAvailable()) IMU.readAcceleration(ax, ay, az);
+//       IMU.readAcceleration(ax, ay, az);
+//       str_acc = "," + String(ax,3) + "," + String(ay,3) + "," + String(az,3);
+//     } else {
+//       str_acc = "";
+//     }
+//     if (gyr_active) {
+//       // if (IMU.gyroscopeAvailable()) IMU.readGyroscope(gx, gy, gz);
+//       IMU.readGyroscope(gx, gy, gz);
+//       str_gyr = "," + String(gx,2) + "," + String(gy,2) + "," + String(gz,2);
+//     } else {
+//       str_gyr = "";
+//     }
+
+//     // MLX90393 readings
+//     float mx = 0, my = 0, mz = 0;
+//     if (mag_active) {
+//       if (count_mag == 0) {
+//         mag.readData(&mx, &my, &mz);
+//         str_mag = "," + String(mx,2) + "," + String(my,2) + "," + String(mz,2);
+//       }
+//       count_mag = (count_mag + 1) % 4;      
+//     } else {
+//       str_mag = "";
+//     }
+
+//     // Format CSV
+//     String line = String(timestamp) + str_acc + str_gyr + str_mag + "," + String(data_num);
+
+//     logger.logRecord(line);
+//     Serial.println(line);
+
+//     delay(interval);
+//     data_num += 1;
+//   }
+
+//   logger.flush();
+//   Serial.println("Logging complete. Dumping logs...\n");
+
+//   Serial.println("Turning on wifi. 30sec to connect...\n");
+//   startWiFi();
+
+//   delay(30000);
+
+
+//   for (uint16_t i = 0; i < 5; i++) {
+//     server.handleClient();
+//     delay(10);
+//     Serial.println("\n--- handled ---");
+//     Serial.println("\n--- write yes to read again, no to exit read loop ---");
+//     String input = "";
+//     while (input.length() == 0) {
+//       while (Serial.available()) {
+//         char c = Serial.read();
+//         if (c == '\n' || c == '\r') break;
+//         input += c;
+//       }
+//     }
+//     if (input == "no"){
+//       break;
+//     }
+//   }
+
+
+//   Serial.println("\n--- CSV complete ---");
+//   while (1);
+// }
