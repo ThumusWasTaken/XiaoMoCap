@@ -16,12 +16,50 @@
     #status { margin-top:8px; font-family: monospace; color:#333; }
     .small { font-size:13px; color:#666; }
     .note { margin-top:8px; color:#777; font-size:13px; }
+    @media (max-width: 768px) {
+      body {margin: 5px;}
+      textarea {height: 250px; font-size: 11px;}
+      button {padding: 14px 10px; font-size: 13px; margin-right: 3px;}
+      .form-section, .checkbox-section {padding: 10px;}
+      input[type="number"] {width: 70px; margin-right: 5px;}
+      .checkbox-item label {font-size: 15px;}
+    }
   </style>
 </head>
 <body>
   <h2>ESP32 CSV Fetcher (curl-like) </h2>
   <div class="note">
-    Make sure you are connected to the ESP32 AP and that your ESP32 `/data` handler sends <code>Access-Control-Allow-Origin: *</code>.
+    Connect to Wi-Fi: ESP32-DataServer. Your ESP32 `/data` handler sends <code>Access-Control-Allow-Origin: *</code>.
+  </div>
+
+  <div class="form-section">
+    <h3>Configure Logging</h3>
+    <form id="configForm">
+      <label for="duration">Duration (s):</label>
+      <input type="number" id="duration" min="1" max="54000" required>
+
+      <label for="rate">Rate (Hz):</label>
+      <input type="number" id="rate" min="1" max="100" required>
+
+      <button type="submit">📤 Send Config</button>
+    </form>
+    <div id="formResponse"></div>
+  </div>
+
+  <div class="checkbox-section">
+    <h3>Which sensor are you using?</h3>
+    <div class="checkbox-item">
+      <input type="checkbox" id="accelerometer">
+      <label for="accelerometer">Accelerometer</label>
+    </div>
+    <div class="checkbox-item">
+      <input type="checkbox" id="gyroscope">
+      <label for="gyroscope">Gyroscope</label>
+    </div>
+    <div class="checkbox-item">
+      <input type="checkbox" id="magnetometer">
+      <label for="magnetometer">Magnetometer</label>
+    </div>
   </div>
 
   <div class="controls">
@@ -50,6 +88,34 @@
     let startTimeMs = 0;
     let receivedBytes = 0;
     let lastUpdateTime = 0;
+
+    const durationInput = document.getElementById("duration");
+    const rateInput = document.getElementById("rate");
+    const formResponse = document.getElementById("formResponse");
+
+    document.getElementById("configForm").addEventListener("submit", function (e) {
+      e.preventDefault();
+      const duration = durationInput.value;
+      const rate = rateInput.value;
+      const accel = document.getElementById("accelerometer").checked;
+      const gyro = document.getElementById("gyroscope").checked;
+      const mag = document.getElementById("magnetometer").checked;
+
+      const noSelection = !accel && !gyro && !mag;
+      const params = new URLSearchParams({
+        duration,
+        rate,
+        accelerometer: noSelection || accel,
+        gyroscope: noSelection || gyro,
+        magnetometer: noSelection || mag
+      });
+
+      const url = `${ESP32_URL}/send?${params.toString()}`;
+      formResponse.textContent = `✅ Config sent: Duration=${duration}s, Rate=${rate}Hz, Accel=${params.get("accelerometer")}, Gyro=${params.get("gyroscope")}, Mag=${params.get("magnetometer")}`;
+      fetch(url).catch(err => {
+        //formResponse.textContent = "❌ Error: " + err;
+      });
+    });
 
     function humanBytes(bytes) {
       if (bytes < 1024) return bytes + " B";
