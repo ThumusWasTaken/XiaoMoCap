@@ -21,6 +21,9 @@ int32_t data_num = 0;
 bool acc_active = true;
 bool gyr_active = true;
 bool mag_active = true;
+uint32_t duration_ms = 60000;       // Default: 60 seconds
+uint16_t sample_rate_hz = 10;       // Default: 10 Hz
+bool configReceived = false;
 Adafruit_MLX90393 mag = Adafruit_MLX90393();
 
 // WiFi credentials for Access Point
@@ -85,6 +88,32 @@ void handleData() {
   }
 
   server.sendContent("");
+}
+
+void handleLoggingConfig() {
+  if (server.hasArg("duration") && server.hasArg("rate")) {
+    for (int i = 0; i < server.args(); i++) {
+      Serial.printf(" - %s = %s\n", server.argName(i).c_str(), server.arg(i).c_str());
+    }
+
+    duration_ms = server.arg("duration").toInt() * 1000UL;
+    sample_rate_hz = server.arg("rate").toInt();
+    
+    acc_active = (server.arg("accelerometer") == "true");
+    gyr_active = (server.arg("gyroscope") == "true");
+    mag_active = (server.arg("magnetometer") == "true");
+
+    if (duration_ms == 0) duration_ms = 60000;
+    if (sample_rate_hz == 0 || sample_rate_hz > 100) sample_rate_hz = 10;
+
+    configReceived = true;
+
+    Serial.printf("✔ Config received: %lu ms, %u Hz\n", duration_ms, sample_rate_hz);
+    Serial.printf("✔ Config received: accel: %, gyro: %, magne: %", acc_active, gyr_active, mag_active);
+    server.send(200, "text/plain", "✔ Logging config received.");
+  } else {
+    server.send(400, "text/plain", "❌ Missing 'duration' or 'rate' parameter.");
+  }
 }
 
 
@@ -172,6 +201,7 @@ void setup() {
   // Set up web server routes
   //server.on("/", handleRoot);
   server.on("/data", handleData);
+  server.on("/send", handleLoggingConfig);
 
   // Start server
   server.begin();
@@ -180,35 +210,45 @@ void setup() {
   delay(1000);
 }
 void loop() {
-  Serial.println("\n--- Logging Menu ---");
-  Serial.println("Enter logging duration in seconds: ");
-  String input = "";
-  while (input.length() == 0) {
-    while (Serial.available()) {
-      char c = Serial.read();
-      if (c == '\n' || c == '\r') break;
-      input += c;
-    }
-  }
-  uint32_t duration_ms = input.toInt() * 1000UL;
-  if (duration_ms == 0) duration_ms = 60000;
+  startWiFi();
 
-  Serial.println("Enter sampling rate in Hz: ");
-  input = "";
-  while (input.length() == 0) {
-    while (Serial.available()) {
-      char c = Serial.read();
-      if (c == '\n' || c == '\r') break;
-      input += c;
-    }
+  Serial.println("\n--- Logging Menu ---");
+  // Serial.println("Enter logging duration in seconds: ");
+  // String input = "";
+  // while (input.length() == 0) {
+  //   while (Serial.available()) {
+  //     char c = Serial.read();
+  //     if (c == '\n' || c == '\r') break;
+  //     input += c;
+  //   }
+  // }
+  // uint32_t duration_ms = input.toInt() * 1000UL;
+  // if (duration_ms == 0) duration_ms = 60000;
+
+  // Serial.println("Enter sampling rate in Hz: ");
+  // input = "";
+  // while (input.length() == 0) {
+  //   while (Serial.available()) {
+  //     char c = Serial.read();
+  //     if (c == '\n' || c == '\r') break;
+  //     input += c;
+  //   }
+  // }
+  // uint16_t sample_rate_hz = input.toInt();
+  // if (sample_rate_hz == 0 || sample_rate_hz > 100) sample_rate_hz = 10;
+
+  Serial.println("Input duration and sampling rate in GUI: ");
+  while (!configReceived) {
+    server.handleClient();
+    delay(500);
   }
-  uint16_t sample_rate_hz = input.toInt();
-  if (sample_rate_hz == 0 || sample_rate_hz > 100) sample_rate_hz = 10;
 
   uint32_t interval_us = 1000000UL / sample_rate_hz;  // sampling interval in microseconds
 
   Serial.printf("Logging for %lu seconds at %u Hz...\n", duration_ms / 1000, sample_rate_hz);
   Serial.println("timestamp,ax,ay,az,gx,gy,gz,mx,my,mz,counter");
+
+  shutdownWiFi();
 
   // --- Get initial time ---
   struct timeval tv;
