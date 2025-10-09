@@ -16,7 +16,7 @@ W25N01GV flash(FLASH_CS);
 BadBlockManager bbm(flash);
 Logger logger(flash, bbm);
 
-int32_t data_num = 0;
+uint32_t data_num = 0;
 // Sensors
 bool acc_active = true;
 bool gyr_active = true;
@@ -25,6 +25,17 @@ uint32_t duration_ms = 60000;       // Default: 60 seconds
 uint16_t sample_rate_hz = 10;       // Default: 10 Hz
 bool configReceived = false;
 Adafruit_MLX90393 mag = Adafruit_MLX90393();
+
+// Switch and LED settings
+#define LED_PIN 2        // D0 on XIAO ESP32-C3 (GPIO2)
+#define BUTTON_PIN 9     // BOOT button is on GPIO9
+volatile bool buttonInterruptTriggered = false;
+unsigned long lastInterruptTime = 0;
+const unsigned long debounceDelay = 200;  // ms debounce
+bool interruptsAllowed = false;
+volatile bool longPressDetected = false;
+unsigned long buttonPressStart = 0;
+bool buttonHeld = false;
 
 // WiFi credentials for Access Point
 const char* ssid = "ESP32-DataServer";
@@ -116,7 +127,44 @@ void handleLoggingConfig() {
   }
 }
 
+// Function to properly disable SPI to free up GPIO9
+void disableSPIForButton() {
+  // End SPI communication
+  SPI.end();
+  // Set CS high to deselect flash
+  digitalWrite(FLASH_CS, HIGH);
+  // Configure GPIO9 as input with pullup for button
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  // Small delay to let pin settle
+  delay(10);
+  
+  Serial.println("SPI disabled, GPIO9 configured for button");
+}
 
+// Function to re-enable SPI for flash access
+void enableSPIForFlash() {
+  // Reconfigure SPI
+  SPI.begin();
+  // Reinitialize flash
+  flash.setSPIFrequency(1000000);
+  // Set CS as output and select flash
+  pinMode(FLASH_CS, OUTPUT);
+  digitalWrite(FLASH_CS, LOW);
+  // Small delay to let SPI settle
+  delay(10);
+  
+  Serial.println("SPI re-enabled for flash access");
+}
+
+void IRAM_ATTR handleButtonPress() {
+  if (!interruptsAllowed) return;  // Ignore until setup is done
+
+  unsigned long currentTime = millis();
+  if ((currentTime - lastInterruptTime) > debounceDelay) {
+    buttonInterruptTriggered = true;
+    lastInterruptTime = currentTime;
+  }
+}
 
 void setup() {
   //Serial.begin(115200);
@@ -207,66 +255,114 @@ void setup() {
   server.begin();
   Serial.println("HTTP server started");
 
-  delay(1000);
+  
+  //Internal LED setup
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);  // Ensure it's off initially
+  //Boot button setup
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  // Wait for button to be released and settle
+  while (digitalRead(BUTTON_PIN) == LOW) {
+    Serial.println("Waiting for button release...");
+    delay(50);
+  }
+  // Small delay to ensure pin settles
+  delay(100);
+  // Attach interrupt but don't allow it to trigger yet
+  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), handleButtonPress, FALLING);
+  // Set debounce timer
+  lastInterruptTime = millis();
 }
 void loop() {
   startWiFi();
 
   Serial.println("\n--- Logging Menu ---");
-  // Serial.println("Enter logging duration in seconds: ");
-  // String input = "";
-  // while (input.length() == 0) {
-  //   while (Serial.available()) {
-  //     char c = Serial.read();
-  //     if (c == '\n' || c == '\r') break;
-  //     input += c;
-  //   }
-  // }
-  // uint32_t duration_ms = input.toInt() * 1000UL;
-  // if (duration_ms == 0) duration_ms = 60000;
-
-  // Serial.println("Enter sampling rate in Hz: ");
-  // input = "";
-  // while (input.length() == 0) {
-  //   while (Serial.available()) {
-  //     char c = Serial.read();
-  //     if (c == '\n' || c == '\r') break;
-  //     input += c;
-  //   }
-  // }
-  // uint16_t sample_rate_hz = input.toInt();
-  // if (sample_rate_hz == 0 || sample_rate_hz > 100) sample_rate_hz = 10;
-
   Serial.println("Input duration and sampling rate in GUI: ");
-  while (!configReceived) {
+  unsigned long longPressStart = 0;
+  bool isPressing = false;
+  bool ledState_init = false;
+  // Waiting for either config to be sent from GUI via WIFI or for a long button press to activate default settings
+  while (!configReceived && !longPressDetected) {
     server.handleClient();
-    delay(500);
+
+    // Check for long press
+    if (digitalRead(BUTTON_PIN) == LOW) {
+      if (!isPressing) {
+        longPressStart = millis();
+        isPressing = true;
+      } else {
+        if (millis() - longPressStart >= 3000) {
+          longPressDetected = true;
+          configReceived = true;
+          Serial.println("Long button press detected. Using default config.");
+          break;
+        }
+      }
+    } else {
+      isPressing = false;
+    }
+
+    delay(100);
+    ledState_init = !ledState_init;
+    if (ledState_init == true) {
+      //printing less regularily
+      Serial.println("Waiting for logging config via /send?duration=60&rate=10 or long press...");
+      digitalWrite(LED_PIN, HIGH); // On
+    } else {
+      digitalWrite(LED_PIN, LOW); // Off
+    }
+    delay(400);
   }
+
+  shutdownWiFi();
 
   uint32_t interval_us = 1000000UL / sample_rate_hz;  // sampling interval in microseconds
 
   Serial.printf("Logging for %lu seconds at %u Hz...\n", duration_ms / 1000, sample_rate_hz);
+  
+
+  // all is setup do another button press to start the measurement
+  // Enable interrupt trigger AFTER things are stable
+  interruptsAllowed = true;
+  while (1) {
+    digitalWrite(LED_PIN, HIGH);
+
+    if (buttonInterruptTriggered) {
+      Serial.println("👉 BOOT button interrupt triggered! Starting test");
+      buttonInterruptTriggered = false;
+      break;
+    }
+  }
+  // Disable interrupt trigger AFTER things are stable
+  interruptsAllowed = false;
+  digitalWrite(LED_PIN, LOW);
+
   Serial.println("timestamp,ax,ay,az,gx,gy,gz,mx,my,mz,counter");
 
-  shutdownWiFi();
 
   // --- Get initial time ---
   struct timeval tv;
   gettimeofday(&tv, NULL);
   uint64_t base_timestamp_us = (uint64_t)tv.tv_sec * 1000000ULL + tv.tv_usec;
 
+  // --- Setup for LED blinking during meas ---
+  uint32_t lastBlinkTime = 0;
+  bool ledState = false;
+  const uint32_t blinkInterval = 3000;  // Blink every 3 s
+  // Improvement make it so ON/OFF intevals are different - minimal LED on time
+
   // --- Loop control ---
   uint32_t startTime = millis();
   uint64_t current_timestamp_us = base_timestamp_us;
-
   uint8_t mag_count = 0;
+  uint32_t nextTick = micros();
+  // Init sensor readings:
+  float ax = 0, ay = 0, az = 0;
+  float gx = 0, gy = 0, gz = 0;
+  float mx = 0, my = 0, mz = 0;
 
   while (millis() - startTime < duration_ms) {
     // --- Sensor readings ---
-    float ax = 0, ay = 0, az = 0;
-    float gx = 0, gy = 0, gz = 0;
-    float mx = 0, my = 0, mz = 0;
-
     if (acc_active) IMU.readAcceleration(ax, ay, az);
     if (gyr_active) IMU.readGyroscope(gx, gy, gz);
     if (mag_active && mag_count == 0) mag.readData(&mx, &my, &mz);
@@ -291,155 +387,142 @@ void loop() {
     // Increment timestamp deterministically
     current_timestamp_us += interval_us;
 
-    // Timing control
-    uint64_t nextTick = micros() + interval_us;
-    while ((long)(micros() - nextTick) < 0) {
-      // yield();
+    // --- Timing control ---
+    nextTick += interval_us;  // schedule next tick
+    while ((uint32_t)(micros() - nextTick) < 0) {
+      // optional:
+      // yield();  // allow background tasks
     }
 
     data_num++;
+
+    // Handle LED blinking without delay
+    if (millis() - lastBlinkTime >= blinkInterval) {
+      lastBlinkTime = millis();
+      ledState = !ledState;
+      if (ledState == true) {
+        digitalWrite(LED_PIN, HIGH); // On
+      } else {
+        digitalWrite(LED_PIN, LOW); // Off
+      } 
+    }
+
+    // Detect long button press (3 seconds)
+    static bool buttonHeld = false;
+    static unsigned long buttonPressStart = 0;
+
+    if (digitalRead(BUTTON_PIN) == LOW) {
+      if (!buttonHeld) {
+        buttonHeld = true;
+        buttonPressStart = millis();
+      } else {
+        if (millis() - buttonPressStart >= 3000) {
+          Serial.println("Long press detected! (3 seconds). Exiting measurement loop");
+          // Add any special logic here (e.g., cancel logging, add marker, etc.)
+          break; // ← Optional early exit
+        }
+      }
+    } else {
+      buttonHeld = false;
+    }
   }
+
+  digitalWrite(LED_PIN, LOW);
 
   logger.flush();
   Serial.println("Logging complete.");
-  startWiFi();
-  delay(30000);
 
-  for (uint16_t i = 0; i < 5; i++) {
-    server.handleClient();
-    delay(10);
-    Serial.println("\n--- handled ---");
-    Serial.println("\n--- write yes to read again, no to exit read loop ---");
-    String input = "";
-    while (input.length() == 0) {
-      while (Serial.available()) {
-        char c = Serial.read();
-        if (c == '\n' || c == '\r') break;
-        input += c;
+  // CRITICAL: Properly disable SPI before using GPIO9 for button
+  disableSPIForButton();
+
+  // Enable interrupt trigger AFTER SPI is disabled
+  interruptsAllowed = true;
+  //USB download false
+  bool USB_download = false;
+  while (1) {
+    digitalWrite(LED_PIN, HIGH);
+    delay(400);
+    digitalWrite(LED_PIN, LOW);
+    delay(800);
+
+    if (buttonInterruptTriggered) {
+      buttonInterruptTriggered = false;
+      Serial.println("👉 BOOT button interrupt triggered!");
+      break;
+    }
+    if (Serial.available()) {
+      String command = Serial.readStringUntil('\n');
+      command.trim();
+
+      if (command == "DOWNLOAD") {
+        USB_download = true;
+        break;     
       }
     }
-    if (input == "no") break;
+  }
+  // Disable interrupt trigger
+  interruptsAllowed = false;
+  digitalWrite(LED_PIN, LOW);
+  
+  // CRITICAL: Re-enable SPI before accessing flash
+  enableSPIForFlash();
+
+  if (USB_download == false) {
+    startWiFi();
+    delay(30000);  // Give WiFi time to start
+  } else {
+    Serial.println("=== BEGIN CSV ===");
   }
 
+  //LED on during flash read
+  digitalWrite(LED_PIN, HIGH);
+  // Dump logs
+  server.handleClient();
+  delay(10);
+
+  // for (uint16_t i = 0; i < 5; i++) {
+  //   server.handleClient();
+  //   delay(10);
+  //   Serial.println("\n--- handled ---");
+  //   Serial.println("\n--- write yes to read again, no to exit read loop ---");
+  //   String input = "";
+  //   while (input.length() == 0) {
+  //     while (Serial.available()) {
+  //       char c = Serial.read();
+  //       if (c == '\n' || c == '\r') break;
+  //       input += c;
+  //     }
+  //   }
+  //   if (input == "no") break;
+  // }
+
+  digitalWrite(LED_PIN, LOW);
+
   Serial.println("\n--- CSV complete ---");
-  while (1);
+  
+  delay(30000);
+
+  // Reset flag to wait again for next config
+  configReceived = false;
+  shutdownWiFi();
+
+  // Disable SPI again before waiting for button
+  disableSPIForButton();
+
+  // Enable interrupt trigger AFTER things are stable
+  interruptsAllowed = true;
+  while (1) {
+    digitalWrite(LED_PIN, HIGH);
+    delay(200);
+    digitalWrite(LED_PIN, LOW);
+    delay(2000);
+
+    if (buttonInterruptTriggered) {
+      Serial.println("👉 BOOT button interrupt triggered! Restart wifi");
+      buttonInterruptTriggered = false;
+      break;
+    }
+  }
+  // Disable interrupt trigger AFTER things are stable
+  interruptsAllowed = false;
 }
-
-// void loop() {
-//   Serial.println("\n--- Logging Menu ---");
-//   Serial.println("Enter logging duration in seconds: ");
-//   String input = "";
-//   while (input.length() == 0) {
-//     while (Serial.available()) {
-//       char c = Serial.read();
-//       if (c == '\n' || c == '\r') break;
-//       input += c;
-//     }
-//   }
-//   uint32_t duration_ms = input.toInt() * 1000UL;
-//   if (duration_ms == 0) duration_ms = 60000;
-
-//   Serial.println("Enter sampling rate in Hz: ");
-//   input = "";
-//   while (input.length() == 0) {
-//     while (Serial.available()) {
-//       char c = Serial.read();
-//       if (c == '\n' || c == '\r') break;
-//       input += c;
-//     }
-//   }
-//   uint16_t sample_rate_hz = input.toInt();
-//   if (sample_rate_hz == 0 || sample_rate_hz > 100) sample_rate_hz = 10;
-//   uint32_t interval = 1000000 / sample_rate_hz; // µs
-//   uint32_t nextTick = micros();
-
-//   Serial.printf("Logging for %lu seconds at %u Hz...\n", duration_ms / 1000, sample_rate_hz);
-//   Serial.println("timestamp_iso,ax,ay,az,gx,gy,gz,mx,my,mz,counter");
-//   // Serial.println("timestamp_iso,ax,ay,az,gx,gy,gz,stamp");
-
-//   //int32_t data_num = 0;
-//   String str_acc = "";
-//   String str_gyr = "";
-//   String str_mag = "";
-//   uint8_t count_mag = 0; // set to read every 4 times
-//   //String line = "";
-
-//   uint32_t startTime = millis();
-//   //char lineBuf[160];  // adjust depending on number of fields
-//   uint8_t mag_count = 0;
-
-//   while (millis() - startTime < duration_ms) {
-//     // Timestamp (ISO format)
-//     time_t now_t = time(NULL);
-//     struct tm* tm_info = gmtime(&now_t);
-//     char timestamp[25];
-//     strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", tm_info);
-
-//     // Sensor readings
-//     float ax = 0, ay = 0, az = 0;
-//     float gx = 0, gy = 0, gz = 0;
-//     float mx = 0, my = 0, mz = 0;
-
-//     if (acc_active) IMU.readAcceleration(ax, ay, az);
-//     if (gyr_active) IMU.readGyroscope(gx, gy, gz);
-//     if (mag_active && mag_count == 0) mag.readData(&mx, &my, &mz);
-//     mag_count = (mag_count + 1) % 4;
-
-//       SensorRecord rec;
-//       rec.timestamp = (uint32_t)time(NULL);
-//       rec.ax = (int16_t)(ax * 1000);   // scale to milli-g
-//       rec.ay = (int16_t)(ay * 1000);
-//       rec.az = (int16_t)(az * 1000);
-//       rec.gx = (int16_t)(gx * 100);    // scale to centi-dps
-//       rec.gy = (int16_t)(gy * 100);
-//       rec.gz = (int16_t)(gz * 100);
-//       rec.mx = (int16_t)(mx * 10);     // scale to tenths of µT
-//       rec.my = (int16_t)(my * 10);
-//       rec.mz = (int16_t)(mz * 10);
-//       rec.counter = data_num;
-
-//       logger.logRecord(rec);
-
-
-//     // --- Timing control ---
-//     nextTick += interval;
-//     while ((long)(micros() - nextTick) < 0) {
-//       // Optionally yield or light sleep here
-//     }
-
-//     data_num++;
-//   }
-
-//   //  Serial.println("Last line:");
-//   Serial.println(data_num);
-//   logger.flush();
-//   Serial.println("Logging complete. Dumping logs...\n");
-
-//   Serial.println("Turning on wifi. 30sec to connect...\n");
-//   startWiFi();
-
-//   delay(30000);
-
-
-//   for (uint16_t i = 0; i < 5; i++) {
-//     server.handleClient();
-//     delay(10);
-//     Serial.println("\n--- handled ---");
-//     Serial.println("\n--- write yes to read again, no to exit read loop ---");
-//     String input = "";
-//     while (input.length() == 0) {
-//       while (Serial.available()) {
-//         char c = Serial.read();
-//         if (c == '\n' || c == '\r') break;
-//         input += c;
-//       }
-//     }
-//     if (input == "no"){
-//       break;
-//     }
-//   }
-
-
-//   Serial.println("\n--- CSV complete ---");
-//   while (1);
-// }
