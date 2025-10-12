@@ -10,4 +10,6 @@ These Files are to be used directly on https://jlcpcb.com/
 Note: The Xiao ESP32-C3 is added to the CPL but is not part of the PCB, a window "Project has unselected parts" will show when pressing Next, select "Do not place".
 In the window component placement, make sure the dots of each component is aligned with the one on the PCB.
 
-Note2: I the case of a component out of stock, look for an alternative on https://jlcpcb.com/parts, make sure the foot print is the same and modify the CPL file with the corresponding JLCPCB Part #.
+Note2: In the case of a component out of stock, look for an alternative on https://jlcpcb.com/parts, make sure the foot print is the same and modify the CPL file with the corresponding JLCPCB Part #.
+
+Note3: The battery could be added to the order list similarly to the Xiao ESP32-C3
