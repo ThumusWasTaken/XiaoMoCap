@@ -276,6 +276,7 @@ void setup() {
 void loop() {
   //LED off for standby state
   digitalWrite(LED_PIN, LOW);
+  shutdownWiFi();
   
   // Enable interrupt trigger AFTER things are stable
   interruptsAllowed = true;
