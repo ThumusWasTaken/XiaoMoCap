@@ -1,6 +1,7 @@
 Guide to build and code you TOL, tiny open logger IMU sensor:
 
 1- Arduino code folder:
+TinyOpenLogger_Code
 
 
 2- PCB CAD files folder:
