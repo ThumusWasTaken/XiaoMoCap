@@ -8,7 +8,8 @@ TinyOpenLogger_Code
 KiCad_files
 
 
-3- 3D print link: (create an onshape account) https://cad.onshape.com/documents/7f3e29c87ee979af035eb522/w/dbec0ba7e6f450b7338eaabc/e/624f816bbdc67f06185ccd3e?renderMode=0&uiState=68eb8f6068579bafa34129be
+3- 3D print link: 
+https://cad.onshape.com/documents/7f3e29c87ee979af035eb522/w/dbec0ba7e6f450b7338eaabc/e/624f816bbdc67f06185ccd3e?renderMode=0&uiState=68eb8f6068579bafa34129be
 
 
 
