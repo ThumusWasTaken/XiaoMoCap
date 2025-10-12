@@ -8,6 +8,6 @@ These Files are to be used directly on https://jlcpcb.com/
 5- In section: Bill of Materials, add BOM file: esp_bmi270_mlx90393_withLED and CPL file: esp_bmi270_mlx90393-pos_numbered_withLED.
 
 Note: The Xiao ESP32-C3 is added to the CPL but is not part of the PCB, a window "Project has unselected parts" will show when pressing Next, select "Do not place".
-In the window component placement, make sure the dots of each component is aligned with the one on the PCB.
+In the window component placement, make sure the purple dots of each component is aligned with the dot/arrow/star on the silkscreen.
 
 Note2: I the case of a component out of stock, look for an alternative on https://jlcpcb.com/parts, make sure the foot print is the same and modify the CPL file with the corresponding JLCPCB Part #.
